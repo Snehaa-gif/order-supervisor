@@ -1,0 +1,45 @@
+[project]
+name = "order-supervisor"
+version = "0.1.0"
+description = "Long-running AI order supervisor on Temporal"
+requires-python = ">=3.12"
+dependencies = [
+    "asyncpg>=0.32.0",
+    "fastapi>=0.162.0",
+    "google-genai>=2.34.0",
+    "httpx>=0.28.1",
+    "pydantic-settings>=2.16.2",
+    "sqlalchemy[asyncio]>=2.1.6",
+    "temporalio>=1.35.0",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[dependency-groups]
+dev = [
+    "aiosqlite>=0.22.1",
+    "httpx>=0.28.1",
+    "pytest>=9.2.0",
+    "pytest-asyncio>=1.4.1",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.17.3",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+testpaths = ["tests"]
+markers = ["unit: fast pure-logic tests", "integration: tests using the database, API or Temporal test server"]
+
+[tool.ruff]
+line-length = 130
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "RUF"]
+ignore = ["RUF001"]
+
+[tool.ruff.lint.per-file-ignores]
+# Prompt text and canned mock responses read better unwrapped.
+"app/agent/prompts.py" = ["E501"]
+"app/agent/llm/mock.py" = ["E501"]
