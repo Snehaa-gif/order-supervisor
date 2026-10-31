@@ -1,5 +1,6 @@
 """Thin boundary between the HTTP API and Temporal, so the API can be tested without a server."""
 
+from datetime import timedelta
 from typing import Any, Protocol
 
 from temporalio.client import Client, WorkflowExecutionStatus, WorkflowHandle
@@ -11,6 +12,9 @@ from app.config import get_settings
 from app.domain import RunInput
 from app.temporal_client import get_temporal_client
 from app.workflows.order_supervisor import OrderSupervisorWorkflow
+
+# Fail fast instead of leaving an HTTP request hanging when Temporal doesn't answer.
+RPC_TIMEOUT = timedelta(seconds=10)
 
 
 class WorkflowUnavailable(Exception):
@@ -53,6 +57,7 @@ class TemporalGateway:
                 task_queue=get_settings().task_queue,
                 id_conflict_policy=WorkflowIDConflictPolicy.FAIL,
                 id_reuse_policy=WorkflowIDReusePolicy.ALLOW_DUPLICATE,
+                rpc_timeout=RPC_TIMEOUT,
             )
         except WorkflowAlreadyStartedError as exc:
             raise WorkflowClosed(f"A supervisor workflow is already running for this order ({workflow_id})") from exc
@@ -64,16 +69,16 @@ class TemporalGateway:
         handle: WorkflowHandle = client.get_workflow_handle(workflow_id)
         try:
             if arg is None:
-                await handle.signal(name)
+                await handle.signal(name, rpc_timeout=RPC_TIMEOUT)
             else:
-                await handle.signal(name, arg)
+                await handle.signal(name, arg, rpc_timeout=RPC_TIMEOUT)
         except RPCError as exc:
             raise _translate(exc, "signal it") from exc
 
     async def is_running(self, workflow_id: str) -> bool:
         client = await _client()
         try:
-            description = await client.get_workflow_handle(workflow_id).describe()
+            description = await client.get_workflow_handle(workflow_id).describe(rpc_timeout=RPC_TIMEOUT)
         except RPCError as exc:
             if exc.status == RPCStatusCode.NOT_FOUND:
                 return False

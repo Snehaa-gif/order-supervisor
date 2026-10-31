@@ -182,6 +182,9 @@ function detailToMessages(detail: unknown): string[] {
   return [];
 }
 
+/** Give up on a request that hangs, so a button never spins forever. */
+const REQUEST_TIMEOUT_MS = 20_000;
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
@@ -189,8 +192,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       ...init,
       headers: { "Content-Type": "application/json", ...init?.headers },
       cache: "no-store",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "TimeoutError") {
+      throw new ApiError(0, ["The API took too long to answer. Please try again."]);
+    }
     throw new ApiError(0, [`Cannot reach the API at ${API_URL}. Is the backend running?`]);
   }
   if (!response.ok) {

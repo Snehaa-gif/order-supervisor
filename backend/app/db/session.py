@@ -12,6 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from app.config import get_settings
 from app.db.models import Base
 
+POOL_RECYCLE_SECONDS = 240
+
 
 def normalize_database_url(raw: str) -> tuple[str, dict[str, Any]]:
     """Turn a plain `postgres://` / `postgresql://` URL (as Supabase shows it) into an asyncpg URL.
@@ -26,6 +28,9 @@ def normalize_database_url(raw: str) -> tuple[str, dict[str, Any]]:
         host = url.host or ""
         if host not in ("localhost", "127.0.0.1") and "ssl" not in url.query and "sslmode" not in url.query:
             connect_args["ssl"] = "require"
+        # Fail fast instead of hanging on a connection the network silently dropped.
+        connect_args["timeout"] = 10
+        connect_args["command_timeout"] = 30
         if "pooler.supabase.com" in host:
             # Supabase's pooler can't keep prepared statements across connections.
             connect_args["statement_cache_size"] = 0
@@ -35,7 +40,8 @@ def normalize_database_url(raw: str) -> tuple[str, dict[str, Any]]:
 @lru_cache
 def get_engine() -> AsyncEngine:
     url, connect_args = normalize_database_url(get_settings().database_url)
-    return create_async_engine(url, connect_args=connect_args, pool_pre_ping=True)
+    # Recycle pooled connections before Supabase's pooler drops them as idle.
+    return create_async_engine(url, connect_args=connect_args, pool_pre_ping=True, pool_recycle=POOL_RECYCLE_SECONDS)
 
 
 @lru_cache
